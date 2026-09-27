@@ -34,7 +34,7 @@ internal static class SiteIcon
               icons.push(l.href);
           }
           const manifest = document.querySelector('link[rel~="manifest"][href]');
-          return { icons, manifest: manifest ? manifest.href : null, favicon: new URL('/favicon.ico', location.href).href };
+          return { page: location.href, icons, manifest: manifest ? manifest.href : null, favicon: new URL('/favicon.ico', location.href).href };
         })()
         """;
 
@@ -329,8 +329,8 @@ internal static class SiteIcon
     }
 
     /// <summary>
-    /// Many site icons sit inside a transparent margin (DayPuff: 193×188 of 256, off-center), which
-    /// looks small next to other taskbar icons. Crop to the visible pixels and center on a square.
+    /// Site icons often sit inside transparent margins, which makes them look small on the taskbar.
+    /// Crop to the visible pixels and center on a square.
     /// </summary>
     private static Bitmap TrimToSquare(Image source)
     {

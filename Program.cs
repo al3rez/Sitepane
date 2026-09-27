@@ -15,8 +15,8 @@ internal static class AppPaths
         if (!Directory.Exists(root) && Directory.Exists(legacy))
         {
             try { Directory.Move(legacy, root); }
-            catch (IOException) { }
-            catch (UnauthorizedAccessException) { }
+            catch (IOException) { return legacy; }
+            catch (UnauthorizedAccessException) { return legacy; }
         }
         return root;
     }
@@ -73,7 +73,7 @@ static class Program
         return url is null ? null : new LaunchOptions(url, install, string.IsNullOrWhiteSpace(name) ? null : name.Trim());
     }
 
-    /// <summary>"daypuff.vercel.app" → https://…; "localhost:5173" → http://… (like a browser's address bar).</summary>
+    /// <summary>"example.com" → https://…; "localhost:5173" → http://… (like a browser's address bar).</summary>
     private static Uri? ParseUrl(string raw)
     {
         if (!raw.Contains("://", StringComparison.Ordinal))

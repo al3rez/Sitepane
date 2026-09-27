@@ -27,7 +27,7 @@ internal partial class Form1 : Form
     private readonly WebView2 _webView = new() { Dock = DockStyle.Fill, DefaultBackgroundColor = Color.Black };
     private readonly LaunchOptions _options;
     private readonly Uri _startUrl;
-    private readonly string? _appId; // null: default app, keeps Sitepane.exe's own taskbar identity
+    private readonly string _appId;
     private readonly Dictionary<string, TaskCompletionSource<IReadOnlyDictionary<int, byte[]>?>> _svgJobs = new();
     private CoreWebView2WindowControlsOverlay? _overlay;
     private bool _chromeVisible;
@@ -49,14 +49,11 @@ internal partial class Form1 : Form
 
         Text = "Sitepane";
         FormBorderStyle = FormBorderStyle.None; // CreateParams adds the thick frame back (border, shadow, snap)
-        WindowState = FormWindowState.Maximized;
         BackColor = Color.Black;
         Controls.Add(_webView);
 
         if (SiteIcon.ReadCache(_startUrl) is { } cached)
             SetSiteIcon(cached);
-        else if (_appId is null && Environment.ProcessPath is { } exe)
-            Icon = Icon.ExtractAssociatedIcon(exe); // the exe icon is the default app's (T3 Code) icon
 
         // Keys pressed inside the page are raised on the WebView2 control (not the form, not KeyPreview).
         _webView.KeyDown += OnWebViewKeyDown;
@@ -223,15 +220,17 @@ internal partial class Form1 : Form
     /// </summary>
     private async Task RefreshSiteIconAsync(Uri page)
     {
-        bool ownHost = string.Equals(page.Host, _startUrl.Host, StringComparison.OrdinalIgnoreCase);
-        if (_iconResolved || (!ownHost && _siteIcon is not null))
+        bool ownApp = string.Equals(page.Authority, _startUrl.Authority, StringComparison.OrdinalIgnoreCase);
+        if (_iconResolved || !ownApp)
             return;
-        _iconResolved = true;
 
         byte[]? ico = null;
         try
         {
             var candidates = await _webView.ExecuteScriptAsync(SiteIcon.CandidatesScript);
+            if (!CandidateDocumentMatchesApp(candidates))
+                return; // navigation raced ExecuteScriptAsync; wait for the matching document
+            _iconResolved = true;
             ico = await SiteIcon.LoadAsync(candidates, RasterizeSvgAsync);
         }
         catch (Exception ex)
@@ -256,6 +255,15 @@ internal partial class Form1 : Form
             Debug.WriteLine($"Icon cache write failed: {ex}");
         }
         ApplyShellIdentity(); // pins and shortcuts reference the cached .ico
+    }
+
+    private bool CandidateDocumentMatchesApp(string candidates)
+    {
+        using var doc = JsonDocument.Parse(candidates);
+        return doc.RootElement.TryGetProperty("page", out var page)
+            && page.ValueKind == JsonValueKind.String
+            && Uri.TryCreate(page.GetString(), UriKind.Absolute, out var uri)
+            && string.Equals(uri.Authority, _startUrl.Authority, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>App name for pins and the Start menu shortcut, from the app's own first page (not a sign-in provider).</summary>
@@ -291,7 +299,7 @@ internal partial class Form1 : Form
     /// <summary>Own taskbar button per site; pinning relaunches this URL with the site icon.</summary>
     private void ApplyShellIdentity()
     {
-        if (_appId is null || !IsHandleCreated)
+        if (!IsHandleCreated)
             return;
         var relaunch = IconFile() is { } icon ? (_startUrl, _appName ?? _startUrl.Host, icon) : ((Uri, string, string)?)null;
         WindowsShell.SetWindowIdentity(Handle, _appId, relaunch);

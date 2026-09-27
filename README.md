@@ -8,7 +8,7 @@ Needs the [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) and the
 
 ```bat
 dotnet run --project Sitepane.csproj
-dotnet run --project Sitepane.csproj -- --install daypuff.vercel.app
+dotnet run --project Sitepane.csproj -- --install example.com
 dotnet run --project Sitepane.csproj -- --install --name "My App" https://example.com
 ```
 

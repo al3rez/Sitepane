@@ -18,14 +18,9 @@ internal static class WindowsShell
     private const uint PID_ID = 5;
     private const ushort VT_LPWSTR = 31;
 
-    /// <summary>
-    /// "Sitepane.daypuff.vercel.app"; null for the default app, which keeps the exe's own identity
-    /// and icon so existing pins of Sitepane.exe stay attached to it.
-    /// </summary>
-    public static string? AppIdFor(Uri url)
+    /// <summary>Stable per-site identity, including the default localhost app.</summary>
+    public static string AppIdFor(Uri url)
     {
-        if (string.Equals(url.Authority, new Uri(Program.DefaultUrl).Authority, StringComparison.OrdinalIgnoreCase))
-            return null;
         var id = "Sitepane." + Regex.Replace(url.Authority.ToLowerInvariant(), "[^a-z0-9.]", "-");
         return id.Length <= 128 ? id : id[..128];
     }
@@ -45,11 +40,13 @@ internal static class WindowsShell
         try
         {
             SetString(store, PID_ID, appId);
-            if (relaunch is not { } r)
-                return;
-            SetString(store, PID_RelaunchCommand, RelaunchCommand(r.Url));
-            SetString(store, PID_RelaunchDisplayNameResource, r.Name);
-            SetString(store, PID_RelaunchIconResource, r.IconFile + ",0");
+            if (relaunch is { } r)
+            {
+                SetString(store, PID_RelaunchCommand, RelaunchCommand(r.Url));
+                SetString(store, PID_RelaunchDisplayNameResource, r.Name);
+                SetString(store, PID_RelaunchIconResource, r.IconFile + ",0");
+            }
+            Marshal.ThrowExceptionForHR(store.Commit());
         }
         finally
         {
@@ -85,7 +82,7 @@ internal static class WindowsShell
         }
     }
 
-    /// <summary>"DayPuff — plan your day by dragging" → "DayPuff"; falls back to the host.</summary>
+    /// <summary>"Planner — tasks for today" → "Planner"; falls back to the host.</summary>
     public static string AppName(string? pageName, Uri url)
     {
         var name = pageName?.Split([" — ", " – ", " | ", " - ", " · ", ": "], 2, StringSplitOptions.None)[0].Trim();
