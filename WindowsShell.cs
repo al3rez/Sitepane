@@ -1,6 +1,5 @@
 using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.ComTypes;
-using System.Text.RegularExpressions;
 
 namespace Sitepane;
 
@@ -18,20 +17,11 @@ internal static class WindowsShell
     private const uint PID_ID = 5;
     private const ushort VT_LPWSTR = 31;
 
-    /// <summary>Stable per-site identity, including the default localhost app.</summary>
-    public static string AppIdFor(Uri url)
-    {
-        var id = "Sitepane." + Regex.Replace(url.Authority.ToLowerInvariant(), "[^a-z0-9.]", "-");
-        return id.Length <= 128 ? id : id[..128];
-    }
-
-    public static string RelaunchCommand(Uri url) => $"\"{Environment.ProcessPath}\" \"{url.AbsoluteUri}\"";
+    private static string RelaunchCommand(Uri url) => $"\"{Environment.ProcessPath}\" \"{url.AbsoluteUri}\"";
 
     /// <summary>
-    /// Taskbar grouping for this window. Relaunch details (what a pin launches, its name and icon) are
-    /// set only once the site icon file exists: the taskbar keeps the relaunch icon it first sees, and
-    /// the only earlier candidate would be Sitepane.exe's (the default app's) icon. Without them the
-    /// button shows the window icon, which updates when the site icon arrives.
+    /// Sets taskbar grouping and, once the icon exists, the command, name and icon used by a pin.
+    /// Until then, the taskbar uses the live window icon.
     /// </summary>
     public static void SetWindowIdentity(IntPtr hwnd, string appId, (Uri Url, string Name, string IconFile)? relaunch)
     {

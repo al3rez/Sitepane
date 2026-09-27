@@ -94,12 +94,11 @@ internal static class SiteIcon
         })();
         """;
 
-    public static byte[]? ReadCache(Uri app)
+    public static byte[]? ReadCache(string path)
     {
         try
         {
-            var path = CachePath(app);
-            return path is not null && File.Exists(path) ? File.ReadAllBytes(path) : null;
+            return File.Exists(path) ? File.ReadAllBytes(path) : null;
         }
         catch (IOException)
         {
@@ -107,25 +106,10 @@ internal static class SiteIcon
         }
     }
 
-    public static void WriteCache(Uri app, byte[] ico)
+    public static void WriteCache(string path, byte[] ico)
     {
-        if (CachePath(app) is not { } path)
-            return;
-        Directory.CreateDirectory(AppPaths.Icons);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         File.WriteAllBytes(path, ico);
-    }
-
-    /// <summary>
-    /// One icon per app, keyed by host[:port] like the app identity, so http→https redirects
-    /// and scheme-less launches share it. Also the icon file used by shortcuts and taskbar pins.
-    /// </summary>
-    public static string? CachePath(Uri app)
-    {
-        if (app.Scheme is not ("http" or "https"))
-            return null;
-        var key = app.Authority.ToLowerInvariant();
-        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(key)))[..16];
-        return Path.Combine(AppPaths.Icons, hash + ".ico");
     }
 
     private static async Task<List<Source>> CollectSourcesAsync(string json)

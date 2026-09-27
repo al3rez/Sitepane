@@ -1,25 +1,22 @@
 namespace Sitepane;
 
-internal static class AppPaths
+internal sealed class AppPaths
 {
-    public static readonly string Root = ResolveRoot();
-    public static readonly string WebViewData = Path.Combine(Root, "WebView2");
-    public static readonly string Icons = Path.Combine(Root, "icons");
+    private static readonly string DataRoot = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Sitepane", "apps");
 
-    // Logins and icons lived under PureBrowse before the rename. Move them once.
-    private static string ResolveRoot()
+    private AppPaths(Uri url)
     {
-        var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        var root = Path.Combine(local, "Sitepane");
-        var legacy = Path.Combine(local, "PureBrowse");
-        if (!Directory.Exists(root) && Directory.Exists(legacy))
-        {
-            try { Directory.Move(legacy, root); }
-            catch (IOException) { return legacy; }
-            catch (UnauthorizedAccessException) { return legacy; }
-        }
-        return root;
+        Root = Path.Combine(DataRoot, AppIdentity.FolderName(url));
+        WebViewData = Path.Combine(Root, "WebView2");
+        IconFile = Path.Combine(Root, "icon.ico");
     }
+
+    public string Root { get; }
+    public string WebViewData { get; }
+    public string IconFile { get; }
+
+    public static AppPaths For(Uri url) => new(url);
 }
 
 /// <param name="Install">Create/refresh a Start menu shortcut once the site's name and icon are known.</param>
@@ -28,8 +25,7 @@ internal sealed record LaunchOptions(Uri Url, bool Install, string? Name);
 
 static class Program
 {
-    public const string DefaultUrl = "http://localhost:3000";
-    private const string Usage = "Usage: Sitepane [--install] [--name \"App name\"] [url]";
+    private const string Usage = "Usage: Sitepane [--install] [--name \"App name\"] <url>";
 
     [STAThread]
     static void Main(string[] args)
@@ -69,7 +65,9 @@ static class Program
             }
         }
 
-        var url = ParseUrl(string.IsNullOrWhiteSpace(raw) ? DefaultUrl : raw);
+        if (string.IsNullOrWhiteSpace(raw))
+            return null;
+        var url = ParseUrl(raw);
         return url is null ? null : new LaunchOptions(url, install, string.IsNullOrWhiteSpace(name) ? null : name.Trim());
     }
 

@@ -28,6 +28,7 @@ internal partial class Form1 : Form
     private readonly LaunchOptions _options;
     private readonly Uri _startUrl;
     private readonly string _appId;
+    private readonly AppPaths _paths;
     private readonly Dictionary<string, TaskCompletionSource<IReadOnlyDictionary<int, byte[]>?>> _svgJobs = new();
     private CoreWebView2WindowControlsOverlay? _overlay;
     private bool _chromeVisible;
@@ -43,7 +44,8 @@ internal partial class Form1 : Form
     {
         _options = options;
         _startUrl = options.Url;
-        _appId = WindowsShell.AppIdFor(_startUrl);
+        _appId = AppIdentity.AppId(_startUrl);
+        _paths = AppPaths.For(_startUrl);
         _appName = options.Name;
         InitializeComponent();
 
@@ -52,7 +54,7 @@ internal partial class Form1 : Form
         BackColor = Color.Black;
         Controls.Add(_webView);
 
-        if (SiteIcon.ReadCache(_startUrl) is { } cached)
+        if (SiteIcon.ReadCache(_paths.IconFile) is { } cached)
             SetSiteIcon(cached);
 
         // Keys pressed inside the page are raised on the WebView2 control (not the form, not KeyPreview).
@@ -82,8 +84,8 @@ internal partial class Form1 : Form
     {
         try
         {
-            // Profile lives outside the build output so logins/localStorage survive rebuilds and cleans.
-            var environment = await CoreWebView2Environment.CreateAsync(userDataFolder: AppPaths.WebViewData);
+            // Every installed URL owns its browser profile, cookies and local storage.
+            var environment = await CoreWebView2Environment.CreateAsync(userDataFolder: _paths.WebViewData);
             await _webView.EnsureCoreWebView2Async(environment);
         }
         catch (WebView2RuntimeNotFoundException)
@@ -216,7 +218,7 @@ internal partial class Form1 : Form
     /// <summary>
     /// Resolved once per run: the app keeps its own icon when it navigates elsewhere. A known-good
     /// icon is not replaced by another host's (e.g. the first page is a sign-in provider). Sites
-    /// without a usable icon get a letter icon, never Sitepane.exe's (the default app's) icon.
+    /// without a usable icon get a generated letter icon.
     /// </summary>
     private async Task RefreshSiteIconAsync(Uri page)
     {
@@ -248,7 +250,7 @@ internal partial class Form1 : Form
         SetSiteIcon(ico);
         try
         {
-            SiteIcon.WriteCache(_startUrl, ico);
+            SiteIcon.WriteCache(_paths.IconFile, ico);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -293,8 +295,7 @@ internal partial class Form1 : Form
         }
     }
 
-    private string? IconFile() =>
-        SiteIcon.CachePath(_startUrl) is { } ico && File.Exists(ico) ? ico : null;
+    private string? IconFile() => File.Exists(_paths.IconFile) ? _paths.IconFile : null;
 
     /// <summary>Own taskbar button per site; pinning relaunches this URL with the site icon.</summary>
     private void ApplyShellIdentity()
