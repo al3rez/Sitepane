@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <AssemblyName>Sitepane</AssemblyName>
+    <RootNamespace>Sitepane</RootNamespace>
+    <Product>Sitepane</Product>
+    <Version>1.0.0</Version>
+    <Description>Turns a website into a Windows app, with the site's icon on the taskbar and nothing around the page.</Description>
+    <ApplicationIcon>app.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 1.0.3650-prerelease: CoreWebView2.WindowControlsOverlay is not in the stable SDK. -->
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3650-prerelease" />
+  </ItemGroup>
+
+  <!-- WebView2's targets always reference its WPF control; this app is WinForms-only (MSB3277 noise). -->
+  <Target Name="RemoveWebView2Wpf" BeforeTargets="ResolveAssemblyReferences">
+    <ItemGroup>
+      <Reference Remove="@(Reference)" Condition="'%(Filename)' == 'Microsoft.Web.WebView2.Wpf'" />
+    </ItemGroup>
+  </Target>
+
+</Project>
