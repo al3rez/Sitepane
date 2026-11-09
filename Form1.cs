@@ -24,7 +24,36 @@ internal partial class Form1 : Form
         ["se"] = NativeChrome.HTBOTTOMRIGHT,
     };
 
-    private readonly WebView2 _webView = new() { Dock = DockStyle.Fill, DefaultBackgroundColor = Color.Black };
+    private readonly WebView2 _webView = new() { Dock = DockStyle.Fill, DefaultBackgroundColor = SystemColors.Window };
+    private readonly TableLayoutPanel _statusPanel = new()
+    {
+        Dock = DockStyle.Fill,
+        BackColor = SystemColors.Window,
+        ForeColor = SystemColors.WindowText,
+        ColumnCount = 1,
+        RowCount = 1,
+    };
+    private readonly FlowLayoutPanel _statusContent = new()
+    {
+        AutoSize = true,
+        FlowDirection = FlowDirection.TopDown,
+        WrapContents = false,
+        Anchor = AnchorStyles.None,
+    };
+    private readonly Label _statusLabel = new()
+    {
+        AutoSize = true,
+        Font = new Font(SystemFonts.MessageBoxFont!.FontFamily, 12),
+        Margin = new Padding(12),
+        TextAlign = ContentAlignment.MiddleCenter,
+    };
+    private readonly Button _retryButton = new()
+    {
+        AutoSize = true,
+        Margin = new Padding(12, 4, 12, 12),
+        Text = "Retry",
+        Visible = false,
+    };
     private readonly LaunchOptions _options;
     private readonly Uri _startUrl;
     private readonly string _appId;
@@ -51,8 +80,14 @@ internal partial class Form1 : Form
 
         Text = "Sitepane";
         FormBorderStyle = FormBorderStyle.None; // CreateParams adds the thick frame back (border, shadow, snap)
-        BackColor = Color.Black;
+        BackColor = SystemColors.Window;
         Controls.Add(_webView);
+        _statusContent.Controls.Add(_statusLabel);
+        _statusContent.Controls.Add(_retryButton);
+        _statusPanel.Controls.Add(_statusContent);
+        Controls.Add(_statusPanel);
+        _retryButton.Click += async (_, _) => await RetryNavigationAsync();
+        ShowLoading();
 
         if (SiteIcon.ReadCache(_paths.IconFile) is { } cached)
             SetSiteIcon(cached);
@@ -82,6 +117,7 @@ internal partial class Form1 : Form
 
     private async Task InitWebViewAsync()
     {
+        ShowLoading();
         try
         {
             // Every installed URL owns its browser profile, cookies and local storage.
@@ -90,13 +126,15 @@ internal partial class Form1 : Form
         }
         catch (WebView2RuntimeNotFoundException)
         {
-            MessageBox.Show(this,
-                "Microsoft Edge WebView2 Runtime is not installed.\nhttps://go.microsoft.com/fwlink/p/?LinkId=2124703",
-                "Sitepane", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            Close();
+            ShowError("Microsoft Edge WebView2 Runtime is not installed.");
             return;
         }
-
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"WebView2 startup failed: {ex}");
+            ShowError("Sitepane could not start the browser.");
+            return;
+        }
         var core = _webView.CoreWebView2;
         core.Settings.IsStatusBarEnabled = false;
         core.Settings.IsNonClientRegionSupportEnabled = true; // CSS app-region: drag for the Alt strip
@@ -119,19 +157,60 @@ internal partial class Form1 : Form
         await core.AddScriptToExecuteOnDocumentCreatedAsync(PageScript.Bootstrap);
         core.WebMessageReceived += OnWebMessage;
         core.DOMContentLoaded += (_, _) => PushPageState();
+        core.NavigationStarting += (_, _) => ShowLoading();
         core.NavigationCompleted += async (_, e) =>
         {
-            if (e.IsSuccess && Uri.TryCreate(core.Source, UriKind.Absolute, out var page) && page.Scheme is ("http" or "https"))
+            if (!e.IsSuccess)
+            {
+                ShowError($"Could not open {_startUrl.Host} ({e.WebErrorStatus}).");
+                return;
+            }
+
+            HideStatus();
+            if (Uri.TryCreate(core.Source, UriKind.Absolute, out var page) && page.Scheme is ("http" or "https"))
             {
                 await ResolveAppNameAsync(page); // first: the letter-icon fallback uses the name
                 await RefreshSiteIconAsync(page);
                 InstallOnce();
             }
         };
+        core.ProcessFailed += (_, e) =>
+            ShowError($"The browser process stopped ({e.ProcessFailedKind}).");
         core.DocumentTitleChanged += (_, _) =>
             Text = string.IsNullOrWhiteSpace(core.DocumentTitle) ? "Sitepane" : core.DocumentTitle;
 
         core.Navigate(_startUrl.AbsoluteUri);
+    }
+
+    private async Task RetryNavigationAsync()
+    {
+        ShowLoading();
+        if (_webView.CoreWebView2 is { } core)
+            core.Navigate(_startUrl.AbsoluteUri);
+        else
+            await InitWebViewAsync();
+    }
+
+    private void ShowLoading()
+    {
+        _statusLabel.Text = $"Opening {_appName ?? _startUrl.Host}…";
+        _retryButton.Visible = false;
+        _statusPanel.Visible = true;
+        _statusPanel.BringToFront();
+    }
+
+    private void ShowError(string message)
+    {
+        _statusLabel.Text = message;
+        _retryButton.Visible = true;
+        _statusPanel.Visible = true;
+        _statusPanel.BringToFront();
+    }
+
+    private void HideStatus()
+    {
+        _statusPanel.Visible = false;
+        _webView.Focus();
     }
 
     private void SetChromeVisible(bool visible)
